@@ -1,0 +1,12 @@
+name: sudoku_solver
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - fastapi
+  - opencv
+  - uvicorn
+  - streamlit
+  - black
+  - isort
+  - plotly
