@@ -23,8 +23,12 @@ if img_file_buffer is not None:
     img_file_buffer = st.image(img)  # delete me later
     grid = img2grid(img)
     grid = dummy_data["input"]
-    sudoku = SudokuGrid(grid, BruteForceStrategy)
+    sudoku = SudokuGrid(grid, solving_algorithm=BruteForceStrategy())
+    st.write("Parsed Sudoku:")
     st.plotly_chart(sudoku.visualize())
-    # sudoku.solve()
-    # sudoku.visualize()
-    # st.write(sudoku.grid)
+    sudoku.solve()
+    if 0 in sudoku.grid:
+        st.write("Could not solve Sudoku")
+    else:
+        with st.expander("Solved Sodoku:"):
+            st.plotly_chart(sudoku.visualize())
