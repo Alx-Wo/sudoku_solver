@@ -1,5 +1,4 @@
-python==3.10
-opencv
+opencv-python
 streamlit
 black
 isort
