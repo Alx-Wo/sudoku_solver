@@ -7,4 +7,6 @@ dependencies:
   - streamlit
   - black
   - isort
+  - libgcc
+  - libstdcxx-ng
   - plotly
