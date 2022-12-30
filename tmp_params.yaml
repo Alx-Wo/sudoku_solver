@@ -1,0 +1,9 @@
+Apply GrayValue Thresholding: 1
+CannyThreshold1: 93
+CannyThreshold2: 177
+DilationIterations: 5
+GrayValueThreshold1: 35
+GrayValueThreshold2: 255
+MaxAreaThreshold: 75
+MinAreaThreshold: 30
+PixelCrop: 100
