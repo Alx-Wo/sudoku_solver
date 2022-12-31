@@ -1,9 +1,11 @@
+import json
 import math
 
 import cv2
 import numpy as np
 import torch
 import yaml
+from skimage.segmentation import clear_border
 from torchvision import transforms
 
 from src.models.mnist_model import Net
@@ -373,10 +375,90 @@ def apply_grid(img: np.ndarray, offset: int = 15) -> list[np.ndarray]:
     return result
 
 
-def classify_cell(img: np.ndarray, model):
-    transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+def preprocess_cell(img: np.ndarray) -> np.ndarray | None:
+    # Gray, blur, contrast enhancement
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # img_blur = cv2.GaussianBlur(img_gray, (7, 7), 1)
+    _, im_thresholded = cv2.threshold(
+        img_gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU
     )
+    im_thresholded = clear_border(im_thresholded)
+    # im_canny = cv2.Canny(im_thresholded, 93, 177)
+    # kernel = np.ones((3, 3))
+    # dil_iteration = 1
+    # im_dil = cv2.dilate(im_canny, kernel, iterations=dil_iteration)
+
+    contours, _ = cv2.findContours(
+        im_thresholded, mode=cv2.RETR_LIST, method=cv2.CHAIN_APPROX_NONE
+    )
+    # im_contours = img.copy()
+    max_area = 0
+    max_contour = 0
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area > max_area:
+            max_area = area
+            max_contour = contour
+    # print(f"Rel area: {max_area / (img.shape[0] * img.shape[1])}")
+    # if max_area > (img.shape[0] * img.shape[1]) * 0.04:
+    #     cv2.drawContours(im_contours, max_contour, -1, (0, 255, 0), 3)
+    # else:
+    #     print("Contour too small to be a number")
+    mask = np.zeros(im_thresholded.shape, dtype="uint8")
+    if max_area > (img.shape[0] * img.shape[1]) * 0.04:
+        cv2.drawContours(mask, [max_contour], -1, 255, -1)
+        # show_image(mask, "Mask")
+        # show_image(im_thresholded, "Thresholded Image")
+        x, y, w, h = cv2.boundingRect(max_contour)
+
+        digit = cv2.bitwise_and(im_thresholded, im_thresholded, mask=mask)
+        digit = digit[y : y + h, x : x + w]
+        digit = cv2.copyMakeBorder(
+            digit,
+            top=10,
+            bottom=10,
+            left=10,
+            right=10,
+            borderType=cv2.BORDER_CONSTANT,
+            value=0,
+        )
+        show_image(digit, "Masked Image")
+        return digit
+        # show_image(digit, "Masked Image")
+    # collage = concat_images(
+    #     img,
+    #     img_gray,
+    #     # img_contrast_enhanced,
+    #     im_thresholded,
+    #     im_canny,
+    #     im_dil,
+    #     im_contours,
+    #     rescale_factor=0.3,
+    # )
+
+    # show_image(collage, "Cell processing")
+    return None
+
+
+def classify_cell(img: np.ndarray, model: torch.nn.Module):
+    cell = preprocess_cell(img)
+    if cell is not None:
+        # classify cell with MNIST model
+        transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,)),
+            ]
+        )
+        cell = cv2.resize(cell, (28, 28))
+        cell = transform(cell)
+        cell = cell[None, :]
+        cell = cell.to("cpu")
+        output = model(cell)
+        pred = output.argmax(dim=1, keepdim=True)
+        return pred.item()
+    else:
+        return 0
 
 
 if __name__ == "__main__":
@@ -386,6 +468,7 @@ if __name__ == "__main__":
     # img_path = "data/raw/1672131911368.jpg"
     # img_path = "data/raw/1672131911352.jpg"  # This one will not work, because sudoku does not make up more than 30% of image area
     img_path = "data/raw/1672131911333.jpg"
+    img_path = "data/raw/1672131911403.jpg"
     img = cv2.imread(img_path)
     with open("tmp_params.yaml", "r", encoding="utf-8") as fid:
         yaml_params = yaml.load(fid, Loader=yaml.loader.SafeLoader)
@@ -395,12 +478,19 @@ if __name__ == "__main__":
     #    yaml_save_path="tmp_params.yaml",
     # )
     puzzle_img = detect_sudoku(img, yaml_params)
-    show_image(puzzle_img, "Detected Puzzle")
+    # show_image(puzzle_img, "Detected Puzzle")
 
     cells = apply_grid(puzzle_img)
     # for idx, cell_img in enumerate(cells):
     #     show_image(cell_img, f"cell ({idx // 9}, {idx % 9})")
+
     model = Net().to("cpu")
-    weights = torch.load("mnist_cnn.pt")
+    weights = torch.load("mnist_cnn_v1.pt")
     model.load_state_dict(weights)
-    cell_classifications = [classify_cell(cell, model) for cell in cells]
+    puzzle = []
+    for cell in cells:
+        puzzle.append(classify_cell(cell, model))
+    print(puzzle)
+    with open("data/raw/1672131911333.json", "r", encoding="utf-8") as fid:
+        dat = json.load(fid)
+    print(dat["input"])
